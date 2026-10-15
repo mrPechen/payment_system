@@ -49,11 +49,36 @@ exchange payments.dlx (direct)
   └─ payments.dlq
 ```
 
+## Архитектура
+
+Слои (по кодстайлу проекта): **Router → Handler → Unit of Work → Query (БД)**, плюс
+доменные сервисы без БД (`PaymentGateway`, `WebhookSender`).
+
+```
+main.py / config.py            # точка входа + frozen-настройки (settings)
+src/
+  database/    db_settings.py (NullPool), models.py (все ORM)
+  dependencies/ auth.py (X-API-Key), db.py (get_async_session)
+  routers/     *_routers.py    # тонкие: только Depends + вызов handler
+  handlers/    *_handlers.py   # оркестрация, маппинг ORM→DTO, бизнес-исключения→HTTP
+  schemas/     base.py (CamelSchema), *_schemas.py
+  services/    gateway.py; queries/ (чистый SQLAlchemy); uow/ (границы транзакций)
+  utils/       exceptions.py (NotFoundError/AlreadyExistsError), http_utils.py (HMAC+webhook)
+  messaging/   broker/topology/publisher/consumer (FastStream)
+  workers/     outbox_worker.py
+telemetry/     setup_telemetry.py  # OpenTelemetry → OTLP
+```
+
+**Осознанное отклонение от кодстайла:** внешние JSON-схемы API остаются `snake_case`
+(`payment_id`, `created_at`, `webhook_url`), т.к. это контракт ТЗ. `CamelSchema`
+применяется только к внутренним схемам; внешние DTO (`src/schemas/payment_schemas.py`)
+наследуют обычный `BaseModel`.
+
 ## Тесты
 
 ```bash
-pytest tests/unit
-pytest tests/integration -m integration   # требует Docker
+uv run pytest tests/unit
+uv run pytest tests/integration -m integration   # требует Docker
 ```
 
 ## За рамками ТЗ (что добавлено и почему)
@@ -67,7 +92,7 @@ pytest tests/integration -m integration   # требует Docker
 | Единый runner миграций (только `api`) | Устраняет гонку миграций при старте нескольких контейнеров |
 | Healthchecks + `depends_on: service_healthy` | Детерминированный порядок старта, меньше flaky |
 | Валидация `webhook_url` (только https) | Безопасность: URL задаёт клиент (SSRF/утечки) |
-| Структурные логи (structlog) с `payment_id` | Наблюдаемость и отладка |
+| Стандартный `logging` + OpenTelemetry | Наблюдаемость: трассировка/метрики/логи в OTLP, трассировка webhook-доставки |
 | Unit + integration тесты (testcontainers) | «Максимально качественно», TDD по регламенту |
 
 ## Smoke check
