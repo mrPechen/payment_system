@@ -1,6 +1,6 @@
 import asyncio
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import httpx
 
@@ -43,7 +43,7 @@ class WebhookSender:
         headers = {
             "Content-Type": "application/json",
             "X-Signature": f"sha256={sign_payload(self.secret, body)}",
-            "X-Timestamp": datetime.now(timezone.utc).isoformat(),
+            "X-Timestamp": datetime.now(UTC).isoformat(),
         }
         last_error: Exception | None = None
         attempts = 1 + len(self.retry_delays)

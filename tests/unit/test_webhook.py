@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal
 from types import SimpleNamespace
 from uuid import uuid4
@@ -20,7 +20,7 @@ def make_payment():
         status=SimpleNamespace(value="succeeded"),
         amount=Decimal("100.50"),
         currency=SimpleNamespace(value="RUB"),
-        processed_at=datetime(2026, 10, 15, tzinfo=timezone.utc),
+        processed_at=datetime(2026, 10, 15, tzinfo=UTC),
         webhook_url="https://client.example/hook",
     )
 

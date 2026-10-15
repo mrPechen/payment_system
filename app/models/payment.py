@@ -20,14 +20,23 @@ class Payment(Base):
     )
     amount: Mapped[Decimal] = mapped_column(Numeric(18, 2), nullable=False)
     currency: Mapped[Currency] = mapped_column(
-        SAEnum(Currency, name="currency"), nullable=False
+        SAEnum(
+            Currency,
+            name="currency",
+            values_callable=lambda enum_cls: [member.value for member in enum_cls],
+        ),
+        nullable=False,
     )
     description: Mapped[str] = mapped_column(Text, nullable=False, default="")
     metadata_: Mapped[dict] = mapped_column(
         "metadata", JSONB, nullable=False, default=dict
     )
     status: Mapped[PaymentStatus] = mapped_column(
-        SAEnum(PaymentStatus, name="payment_status"),
+        SAEnum(
+            PaymentStatus,
+            name="payment_status",
+            values_callable=lambda enum_cls: [member.value for member in enum_cls],
+        ),
         nullable=False,
         default=PaymentStatus.PENDING,
     )
