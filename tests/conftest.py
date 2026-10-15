@@ -10,7 +10,7 @@ os.environ.setdefault("WEBHOOK_SIGNING_SECRET", "test-secret")
 
 @pytest.fixture(scope="session")
 def postgres_url():
-    from testcontainers.postgres import PostgresContainer
+    from testcontainers.community.postgres import PostgresContainer
 
     with PostgresContainer("postgres:16-alpine") as pg:
         yield pg.get_connection_url().replace("psycopg2", "asyncpg")
@@ -18,10 +18,12 @@ def postgres_url():
 
 @pytest.fixture(scope="session")
 def rabbit_url():
-    from testcontainers.rabbitmq import RabbitMQContainer
+    from testcontainers.community.rabbitmq import RabbitMqContainer
 
-    with RabbitMQContainer("rabbitmq:3-management-alpine") as rb:
-        yield rb.get_amqp_url()
+    with RabbitMqContainer("rabbitmq:3-management-alpine") as rb:
+        host = rb.get_container_host_ip()
+        port = rb.get_exposed_port(rb.port)
+        yield f"amqp://{rb.username}:{rb.password}@{host}:{port}/"
 
 
 @pytest.fixture
