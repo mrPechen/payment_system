@@ -69,3 +69,38 @@ pytest tests/integration -m integration   # требует Docker
 | Валидация `webhook_url` (только https) | Безопасность: URL задаёт клиент (SSRF/утечки) |
 | Структурные логи (structlog) с `payment_id` | Наблюдаемость и отладка |
 | Unit + integration тесты (testcontainers) | «Максимально качественно», TDD по регламенту |
+
+## Smoke check
+
+Проверка сквозного пути retry → DLQ на недоступном https-эндпоинте (офлайн-детерминированно):
+
+```bash
+# 1. Создать платёж с заведомо недоступным webhook
+curl -s -X POST http://localhost:8000/api/v1/payments \
+  -H "X-API-Key: dev-api-key" \
+  -H "Idempotency-Key: smoke-dlq" \
+  -H "Content-Type: application/json" \
+  -d '{"amount":"1.00","currency":"EUR","description":"dlq","metadata":{},"webhook_url":"https://127.0.0.1:1/hook"}'
+# → 202 {"payment_id":"...","status":"pending",...}
+
+# 2. Дождаться терминального статуса
+curl -s http://localhost:8000/api/v1/payments/<payment_id> -H "X-API-Key: dev-api-key"
+# → status ∈ {succeeded, failed}, processed_at задан, webhook_delivered_at == null
+
+# 3. Через ~8–12 с сообщение в DLQ (retry 2s → 4s → dlq)
+curl -s -u guest:guest "http://localhost:15672/api/queues/%2F/payments.dlq"
+# → messages == 1; payload: {"payment_id":"...","event_type":"payment.created","retry_count":3}
+#   header: x-reason == "all attempts failed"
+
+# 4. Идемпотентность: тот же Idempotency-Key → тот же payment_id
+curl -s -X POST http://localhost:8000/api/v1/payments \
+  -H "X-API-Key: dev-api-key" -H "Idempotency-Key: smoke-dlq" \
+  -H "Content-Type: application/json" \
+  -d '{"amount":"999.99","currency":"USD","description":"x","metadata":{},"webhook_url":"https://127.0.0.1:1/hook"}'
+# → 202 с тем же payment_id (новый платёж не создаётся)
+```
+
+> **Успешный путь** (доставка webhook, `webhook_delivered_at` != null) требует https-эндпоинта,
+> доступного из контейнера `consumer`. Так как сервис принимает только `https://` webhook-URL,
+> офлайн это не проверить — нужен публичный туннель до локального приёмника (например,
+> `ngrok http 9999` + приёмник `python -m http.server 9999`).
