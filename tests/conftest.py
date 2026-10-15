@@ -4,8 +4,15 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
+# Обязательные и условные переменные окружения задаются ДО импорта config:
+# frozen settings читают их один раз при создании module-level `settings`.
+os.environ.setdefault(
+    "DATABASE_URL", "postgresql+asyncpg://payments:payments@localhost:5432/payments"
+)
+os.environ.setdefault("RABBITMQ_URL", "amqp://guest:guest@localhost:5672/")
 os.environ.setdefault("API_KEY", "test-key")
 os.environ.setdefault("WEBHOOK_SIGNING_SECRET", "test-secret")
+os.environ.setdefault("DEBUG", "true")
 
 
 @pytest.fixture(scope="session")
@@ -28,7 +35,7 @@ def rabbit_url():
 
 @pytest.fixture
 async def engine(postgres_url):
-    from app.models import Base
+    from src.database.models import Base
 
     eng = create_async_engine(postgres_url)
     async with eng.begin() as conn:
@@ -47,12 +54,8 @@ async def db_session(engine):
 
 @pytest.fixture
 async def client(engine):
-    from app.config import get_settings
-    from app.db import get_session
-    from app.main import app
-
-    os.environ["API_KEY"] = "test-key"
-    get_settings.cache_clear()
+    from src.dependencies.db import get_async_session
+    from main import app
 
     maker = async_sessionmaker(engine, expire_on_commit=False)
 
@@ -60,7 +63,7 @@ async def client(engine):
         async with maker() as session:
             yield session
 
-    app.dependency_overrides[get_session] = override_get_session
+    app.dependency_overrides[get_async_session] = override_get_session
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
     ) as ac:

@@ -1,16 +1,43 @@
+from decimal import Decimal
 from uuid import uuid4
 
 import pytest
 from sqlalchemy import func, select
 
-from app.models.outbox import OutboxMessage
-from app.services.payment_service import create_payment, get_payment
+from src.database.models import OutboxMessage
+from src.handlers.payment_handlers import PaymentHandler
+from src.services.uow.payments_uow import PaymentsUnitOfWork
+from src.utils.exceptions import NotFoundError
 
 pytestmark = pytest.mark.integration
 
 
+async def _create_payment(
+    db_session,
+    *,
+    amount,
+    currency,
+    description,
+    metadata,
+    webhook_url,
+    idempotency_key,
+):
+    async with PaymentsUnitOfWork(db_session) as uow:
+        handler = PaymentHandler(uow)
+        return await handler.create_payment(
+            {
+                "amount": amount,
+                "currency": currency,
+                "description": description,
+                "metadata": metadata,
+                "webhook_url": webhook_url,
+            },
+            idempotency_key,
+        )
+
+
 async def test_creates_payment_and_outbox_row(db_session):
-    payment = await create_payment(
+    response = await _create_payment(
         db_session,
         amount="100.50",
         currency="RUB",
@@ -19,17 +46,17 @@ async def test_creates_payment_and_outbox_row(db_session):
         webhook_url="https://c.example/hook",
         idempotency_key="key-1",
     )
-    assert payment.status.value == "pending"
+    assert response.status.value == "pending"
 
     count = await db_session.scalar(select(func.count()).select_from(OutboxMessage))
     assert count == 1
     row = await db_session.scalar(select(OutboxMessage))
-    assert row.aggregate_id == payment.id
-    assert row.payload == {"payment_id": str(payment.id)}
+    assert row.aggregate_id == response.payment_id
+    assert row.payload == {"payment_id": str(response.payment_id)}
 
 
 async def test_duplicate_key_returns_existing(db_session):
-    first = await create_payment(
+    first = await _create_payment(
         db_session,
         amount="10.00",
         currency="USD",
@@ -38,7 +65,7 @@ async def test_duplicate_key_returns_existing(db_session):
         webhook_url="https://c.example/hook",
         idempotency_key="dup",
     )
-    second = await create_payment(
+    second = await _create_payment(
         db_session,
         amount="999.00",
         currency="USD",
@@ -47,9 +74,14 @@ async def test_duplicate_key_returns_existing(db_session):
         webhook_url="https://c.example/hook",
         idempotency_key="dup",
     )
-    assert second.id == first.id
-    assert second.amount == first.amount
+    assert second.payment_id == first.payment_id
+
+    async with PaymentsUnitOfWork(db_session) as uow:
+        existing = await uow.payment.get_by_idempotency_key("dup")
+    assert existing.amount == Decimal("10.00")
 
 
-async def test_get_payment_returns_none_for_missing(db_session):
-    assert await get_payment(db_session, uuid4()) is None
+async def test_get_by_id_raises_not_found_for_missing(db_session):
+    async with PaymentsUnitOfWork(db_session) as uow:
+        with pytest.raises(NotFoundError):
+            await uow.payment.get_by_id(uuid4())

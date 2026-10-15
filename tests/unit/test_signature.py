@@ -1,7 +1,7 @@
 import hashlib
 import hmac
 
-from app.services.signature import sign_payload
+from src.utils.http_utils import sign_payload
 
 
 def test_signs_raw_body_with_hmac_sha256():

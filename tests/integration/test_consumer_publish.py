@@ -4,7 +4,7 @@ import aio_pika
 import pytest
 from faststream.rabbit import RabbitBroker
 
-from app.messaging import publisher, topology
+from src.messaging import publisher, topology
 
 pytestmark = pytest.mark.integration
 

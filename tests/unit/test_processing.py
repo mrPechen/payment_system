@@ -2,12 +2,12 @@ from datetime import UTC, datetime
 from types import SimpleNamespace
 from uuid import uuid4
 
-from app.services.processing import (
+from src.handlers.processing_handlers import (
     ACTION_DONE,
     ACTION_RETRY,
-    ProcessingService,
+    ProcessingHandler,
 )
-from app.services.webhook import PermanentWebhookError, TransientWebhookError
+from src.utils.http_utils import PermanentWebhookError, TransientWebhookError
 
 
 class FakePayment:
@@ -40,11 +40,11 @@ class FakeWebhook:
             raise self.exc
 
 
-class FakeRepo:
+class FakeQuery:
     def __init__(self, payment):
         self.payment = payment
 
-    async def load(self, payment_id):
+    async def get_by_id(self, payment_id):
         return self.payment
 
     async def mark_processed(self, payment, status):
@@ -59,10 +59,18 @@ class FakeRepo:
         payment.webhook_attempts += 1
 
 
+class FakeUow:
+    def __init__(self, payment):
+        self.payment = FakeQuery(payment)
+
+    async def commit(self):
+        pass
+
+
 async def test_success_sets_status_and_sends_webhook():
     payment = FakePayment()
     webhook = FakeWebhook()
-    svc = ProcessingService(FakeRepo(payment), FakeGateway(True), webhook)
+    svc = ProcessingHandler(FakeUow(payment), FakeGateway(True), webhook)
     result = await svc.process(payment.id)
 
     assert result.action == ACTION_DONE
@@ -73,7 +81,7 @@ async def test_success_sets_status_and_sends_webhook():
 async def test_business_failure_marks_failed_and_sends_webhook():
     payment = FakePayment()
     webhook = FakeWebhook()
-    svc = ProcessingService(FakeRepo(payment), FakeGateway(False), webhook)
+    svc = ProcessingHandler(FakeUow(payment), FakeGateway(False), webhook)
     result = await svc.process(payment.id)
 
     assert payment.status.value == "failed"
@@ -84,7 +92,7 @@ async def test_business_failure_marks_failed_and_sends_webhook():
 async def test_transient_webhook_error_requests_retry():
     payment = FakePayment()
     webhook = FakeWebhook(exc=TransientWebhookError("boom"))
-    svc = ProcessingService(FakeRepo(payment), FakeGateway(True), webhook)
+    svc = ProcessingHandler(FakeUow(payment), FakeGateway(True), webhook)
     result = await svc.process(payment.id)
 
     assert result.action == ACTION_RETRY
@@ -93,7 +101,7 @@ async def test_transient_webhook_error_requests_retry():
 async def test_permanent_webhook_error_drops_to_dlq():
     payment = FakePayment()
     webhook = FakeWebhook(exc=PermanentWebhookError("400"))
-    svc = ProcessingService(FakeRepo(payment), FakeGateway(True), webhook)
+    svc = ProcessingHandler(FakeUow(payment), FakeGateway(True), webhook)
     result = await svc.process(payment.id)
 
     assert result.action == "dlq"
@@ -102,7 +110,7 @@ async def test_permanent_webhook_error_drops_to_dlq():
 async def test_terminal_status_still_retries_webhook():
     payment = FakePayment(status="succeeded")
     webhook = FakeWebhook()
-    svc = ProcessingService(FakeRepo(payment), FakeGateway(True), webhook)
+    svc = ProcessingHandler(FakeUow(payment), FakeGateway(True), webhook)
     result = await svc.process(payment.id)
 
     assert result.action == ACTION_DONE

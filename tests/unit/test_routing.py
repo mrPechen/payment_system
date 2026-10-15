@@ -1,5 +1,10 @@
-from app.messaging.consumer import decide_route
-from app.services.processing import ACTION_DLQ, ACTION_DONE, ACTION_RETRY, ProcessingResult
+from src.messaging.consumer import decide_route
+from src.handlers.processing_handlers import (
+    ACTION_DLQ,
+    ACTION_DONE,
+    ACTION_RETRY,
+    ProcessingResult,
+)
 
 
 def test_ack_on_done():

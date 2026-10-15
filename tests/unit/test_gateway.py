@@ -1,6 +1,6 @@
 import time
 
-from app.services.gateway import PaymentGateway
+from src.services.gateway import PaymentGateway
 
 
 async def test_always_succeeds_when_rate_is_one():
