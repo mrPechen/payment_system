@@ -42,7 +42,9 @@ class Payment(Base):
     """Платёж: заявка на проведение и её терминальное состояние."""
 
     __tablename__ = "payments"
-    __table_args__ = (CheckConstraint("amount > 0", name="ck_payments_amount_positive"),)
+    __table_args__ = (
+        CheckConstraint("amount > 0", name="ck_payments_amount_positive"),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4

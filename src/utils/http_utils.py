@@ -46,9 +46,9 @@ class WebhookSender:
             "status": payment.status.value,
             "amount": str(payment.amount),
             "currency": payment.currency.value,
-            "processed_at": payment.processed_at.isoformat()
-            if payment.processed_at
-            else None,
+            "processed_at": (
+                payment.processed_at.isoformat() if payment.processed_at else None
+            ),
         }
         return json.dumps(payload, separators=(",", ":"), sort_keys=True).encode()
 
