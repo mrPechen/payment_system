@@ -157,7 +157,7 @@ async def handle(msg):
 
     if payment.webhook_delivered_at is None:    # webhook-retry работает даже
         try:                                    # при терминальном статусе
-            await webhook.send(payment)         # 3 попытки 1s/2s/4s, status check
+            await webhook.send(payment)         # 3 попытки, backoff 1s/2s
             mark webhook_delivered_at = now()
         except Exception as e:
             route_retry_or_dlq(msg, e); return   # publish retry/DLQ, ack
@@ -178,7 +178,7 @@ async def handle(msg):
 - Подпись: `X-Signature: sha256=<hex>` — HMAC-SHA256 **сырого тела** с
   env `WEBHOOK_SIGNING_SECRET`. Плюс заголовок `X-Timestamp` (защита от replay).
 - `httpx.AsyncClient`, timeout (env), **обязательный** вызов `raise_for_status()`.
-- Внутренний retry: 3 попытки, backoff 1s/2s/4s. **Не ретраить `4xx`** (кроме `429`).
+- Внутренний retry: 3 попытки, backoff 1s/2s. **Не ретраить `4xx`** (кроме `429`).
   Финальный провал → исключение → broker retry → DLQ.
 - At-least-once: клиент может получить дубль → дедуп по `payment_id` (документируем).
 
