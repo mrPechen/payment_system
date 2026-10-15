@@ -87,7 +87,7 @@ curl -s -X POST http://localhost:8000/api/v1/payments \
 curl -s http://localhost:8000/api/v1/payments/<payment_id> -H "X-API-Key: dev-api-key"
 # → status ∈ {succeeded, failed}, processed_at задан, webhook_delivered_at == null
 
-# 3. Через ~8–12 с сообщение в DLQ (retry 2s → 4s → dlq)
+# 3. Через ~15 с сообщение в DLQ (webhook-ретраи + TTL 2s → 4s → dlq)
 curl -s -u guest:guest "http://localhost:15672/api/queues/%2F/payments.dlq"
 # → messages == 1; payload: {"payment_id":"...","event_type":"payment.created","retry_count":3}
 #   header: x-reason == "all attempts failed"
