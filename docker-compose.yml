@@ -26,12 +26,13 @@ services:
 
   api:
     build: .
-    command: sh -c "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000"
+    command: sh -c "alembic upgrade head && gunicorn main:app -c gunicorn.conf.py"
     environment:
       DATABASE_URL: postgresql+asyncpg://payments:payments@postgres:5432/payments
       RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
       API_KEY: dev-api-key
       WEBHOOK_SIGNING_SECRET: dev-webhook-secret
+      DEBUG: "true"
     ports:
       - "${API_PORT:-8000}:8000"
     depends_on:
@@ -53,21 +54,23 @@ services:
 
   outbox-worker:
     build: .
-    command: python -m app.workers.outbox_worker
+    command: python -m src.workers.outbox_worker
     environment:
       DATABASE_URL: postgresql+asyncpg://payments:payments@postgres:5432/payments
       RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
+      DEBUG: "true"
     depends_on:
       api:
         condition: service_healthy
 
   consumer:
     build: .
-    command: python -m app.messaging.consumer
+    command: python -m src.messaging.consumer
     environment:
       DATABASE_URL: postgresql+asyncpg://payments:payments@postgres:5432/payments
       RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
       WEBHOOK_SIGNING_SECRET: dev-webhook-secret
+      DEBUG: "true"
     depends_on:
       api:
         condition: service_healthy
