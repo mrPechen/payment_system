@@ -3,7 +3,11 @@ from datetime import UTC, datetime
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.database.models import OutboxMessage
+from src.database.models import OutboxMessage, Payment
+
+# Тип события создания платежа — дублирует EVENT_TYPE из publisher для атомарной
+# вставки outbox-строки в одной транзакции с платежом.
+PAYMENT_CREATED_EVENT = "payment.created"
 
 
 class OutboxQuery:
@@ -11,6 +15,22 @@ class OutboxQuery:
 
     def __init__(self, session: AsyncSession) -> None:
         self.session = session
+
+    def add(self, payment: Payment) -> None:
+        """
+        Зарегистрировать событие payment.created в outbox (та же транзакция).
+
+        :param payment: созданный платёж, для которого фиксируется событие
+        """
+        # add() не выполняет I/O — событие попадёт в БД на ближайшем commit/flush,
+        # поэтому платёж и outbox-строка атомарны (design 4.5).
+        self.session.add(
+            OutboxMessage(
+                event_type=PAYMENT_CREATED_EVENT,
+                aggregate_id=payment.id,
+                payload={"payment_id": str(payment.id)},
+            )
+        )
 
     async def get_unpublished(self, batch_size: int) -> list[OutboxMessage]:
         """

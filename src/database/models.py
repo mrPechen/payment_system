@@ -10,6 +10,7 @@ from sqlalchemy import (
     Index,
     Numeric,
     Text,
+    UniqueConstraint,
     func,
     text,
 )
@@ -44,6 +45,9 @@ class Payment(Base):
     __tablename__ = "payments"
     __table_args__ = (
         CheckConstraint("amount > 0", name="ck_payments_amount_positive"),
+        # Явный named-constraint зеркалит миграцию 0001 (uq_payments_idempotency_key),
+        # чтобы alembic --autogenerate не давал diff против существующей схемы БД.
+        UniqueConstraint("idempotency_key", name="uq_payments_idempotency_key"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(
